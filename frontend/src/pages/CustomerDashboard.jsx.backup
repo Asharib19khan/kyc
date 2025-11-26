@@ -1,0 +1,624 @@
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
+import { useNavigate } from 'react-router-dom';
+import { useLanguage } from '../contexts/LanguageContext';
+import { 
+    User, Shield, CreditCard, Bell, FileText,
+    CheckCircle, AlertCircle, Clock, LogOut, Menu, X, 
+    DollarSign, Download, RefreshCw, Lock, Home,
+    Settings, HelpCircle, MessageCircle, Send, Moon, Sun,
+    Languages, ChevronLeft, ChevronRight
+} from 'lucide-react';
+
+const CustomerDashboard = () => {
+    const navigate = useNavigate();
+    const { language, toggleLanguage, t, isRTL } = useLanguage();
+    const [loading, setLoading] = useState(true);
+    const [data, setData] = useState(null);
+    const [notifications, setNotifications] = useState([]);
+    const [showNotifications, setShowNotifications] = useState(false);
+    const [loanAmount, setLoanAmount] = useState('');
+    const [loanPurpose, setLoanPurpose] = useState('');
+    const [monthlyIncome, setMonthlyIncome] = useState('');
+    const [isSubmittingLoan, setIsSubmittingLoan] = useState(false);
+    const [sidebarOpen, setSidebarOpen] = useState(true);
+    const [darkMode, setDarkMode] = useState(false);
+    const [showAIChat, setShowAIChat] = useState(false);
+    const [chatMessages, setChatMessages] = useState([]);
+    const [chatInput, setChatInput] = useState('');
+    const [currentPage, setCurrentPage] = useState('dashboard');
+
+    useEffect(() => {
+        const savedDarkMode = localStorage.getItem('darkMode') === 'true';
+        setDarkMode(savedDarkMode);
+        if (savedDarkMode) document.documentElement.classList.add('dark');
+        fetchDashboardData();
+    }, []);
+
+    const toggleDarkMode = () => {
+        const newMode = !darkMode;
+        setDarkMode(newMode);
+        localStorage.setItem('darkMode', newMode);
+        document.documentElement.classList.toggle('dark');
+    };
+
+    const fetchDashboardData = async () => {
+        try {
+            const token = localStorage.getItem('token');
+            if (!token) {
+                navigate('/login');
+                return;
+            }
+            
+            const [statsRes, notifRes] = await Promise.all([
+                axios.get('/api/dashboard/stats', { headers: { Authorization: `Bearer ${token}` } }),
+                axios.get('/api/dashboard/notifications', { headers: { Authorization: `Bearer ${token}` } })
+            ]);
+
+            setData(statsRes.data);
+            setNotifications(notifRes.data);
+        } catch (err) {
+            console.error("Dashboard Error:", err);
+            if (err.response?.status === 401) navigate('/login');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleLogout = () => {
+        localStorage.removeItem('token');
+        navigate('/login');
+    };
+
+    const submitLoanApplication = async (e) => {
+        e.preventDefault();
+        setIsSubmittingLoan(true);
+        try {
+            const token = localStorage.getItem('token');
+            await axios.post('/api/dashboard/loan/apply', {
+                amount: parseInt(loanAmount),
+                purpose: loanPurpose,
+                monthly_income: parseInt(monthlyIncome)
+            }, { headers: { Authorization: `Bearer ${token}` } });
+            
+            alert("Loan Application Submitted Successfully!");
+            fetchDashboardData();
+        } catch (err) {
+            alert(err.response?.data?.detail || "Failed to submit application");
+        } finally {
+            setIsSubmittingLoan(false);
+        }
+    };
+
+    const sendChatMessage = () => {
+        if (!chatInput.trim()) return;
+        
+        const userMsg = { role: 'user', text: chatInput };
+        setChatMessages(prev => [...prev, userMsg]);
+        
+        // Simple AI responses
+        setTimeout(() => {
+            let botResponse = "I'm here to help! Our support team will assist you shortly.";
+            
+            if (chatInput.toLowerCase().includes('loan')) {
+                botResponse = "For loan applications, please ensure you are verified. Check your dashboard for loan status.";
+            } else if (chatInput.toLowerCase().includes('document')) {
+                botResponse = "You can view all your uploaded documents in the 'My Documents' section from the sidebar.";
+            } else if (chatInput.toLowerCase().includes('status')) {
+                botResponse = "Your verification status is shown on the main dashboard. It usually takes 24-48 hours.";
+            }
+            
+            setChatMessages(prev => [...prev, { role: 'bot', text: botResponse }]);
+        }, 500);
+        
+        setChatInput('');
+    };
+
+    if (loading) return (
+        <div className="min-h-screen bg-gray-50 dark:bg-slate-900 flex items-center justify-center">
+            <RefreshCw className="animate-spin text-indigo-600" size={40} />
+        </div>
+    );
+
+    if (!data) return (
+        <div className="min-h-screen bg-gray-50 dark:bg-slate-900 flex items-center justify-center">
+            <div className="text-center">
+                <p className="text-red-500 mb-4">Failed to load dashboard data.</p>
+                <button 
+                    onClick={fetchDashboardData}
+                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+                >
+                    Retry
+                </button>
+            </div>
+        </div>
+    );
+
+    const { customer, verification, loan_application, documents, unread_notifications } = data;
+    const isVerified = verification?.status === 'Verified';
+    const isRejected = verification?.status === 'Rejected';
+    const isPending = !verification || verification?.status === 'Pending';
+
+    const sidebarItems = [
+        { id: 'dashboard', icon: Home, label: t('dashboard') },
+        { id: 'loan', icon: CreditCard, label: t('loanManagement') },
+        { id: 'documents', icon: FileText, label: t('myDocuments') },
+        { id: 'security', icon: Lock, label: t('security') },
+        { id: 'settings', icon: Settings, label: t('settings') },
+        { id: 'help', icon: HelpCircle, label: t('help') },
+    ];
+
+    return (
+        <div className={`min-h-screen bg-gray-50 dark:bg-slate-900 transition-colors duration-300 ${isRTL ? 'rtl' : 'ltr'}`}>
+            {/* Sidebar */}
+            <aside className={`fixed top-0 ${isRTL ? 'right-0' : 'left-0'} h-screen bg-white dark:bg-slate-800 border-${isRTL ? 'l' : 'r'} border-gray-200 dark:border-slate-700 transition-all duration-300 z-40 ${sidebarOpen ? 'w-64' : 'w-20'}`}>
+                <div className="p-4 flex items-center justify-between border-b dark:border-slate-700">
+                    {sidebarOpen && (
+                        <div className="flex items-center gap-2">
+                            <div className="bg-indigo-600 p-2 rounded-lg">
+                                <Shield className="text-white" size={20} />
+                            </div>
+                            <span className="text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-purple-600">
+                                NeoBank
+                            </span>
+                        </div>
+                    )}
+                    <button 
+                        onClick={() => setSidebarOpen(!sidebarOpen)}
+                        className="p-2 hover:bg-gray-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
+                    >
+                        {sidebarOpen ? (isRTL ? <ChevronRight size={20} /> : <ChevronLeft size={20} />) : <Menu size={20} />}
+                    </button>
+                </div>
+
+                <nav className="p-4 space-y-2">
+                    {sidebarItems.map(item => (
+                        <button
+                            key={item.id}
+                            onClick={() => setCurrentPage(item.id)}
+                            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${
+                                currentPage === item.id
+                                    ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400'
+                                    : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-700'
+                            }`}
+                        >
+                            <item.icon size={20} />
+                            {sidebarOpen && <span className="font-medium">{item.label}</span>}
+                        </button>
+                    ))}
+                </nav>
+
+                {sidebarOpen && (
+                    <div className="absolute bottom-4 left-4 right-4 p-4 bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20 rounded-lg border-2 border-indigo-100 dark:border-indigo-800">
+                        <p className="text-xs text-gray-600 dark:text-gray-400 mb-2">Need help?</p>
+                        <button 
+                            onClick={() => setShowAIChat(true)}
+                            className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-sm font-medium"
+                        >
+                            <MessageCircle size={16} />
+                            AI Assistant
+                        </button>
+                    </div>
+                )}
+            </aside>
+
+            {/* Main Content */}
+            <main className={`transition-all duration-300 ${sidebarOpen ? (isRTL ? 'mr-64' : 'ml-64') : (isRTL ? 'mr-20' : 'ml-20')}`}>
+                {/* Navbar */}
+                <nav className="bg-white dark:bg-slate-800 shadow-sm border-b dark:border-slate-700 sticky top-0 z-30">
+                    <div className="px-6 py-4 flex justify-between items-center">
+                        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{t('dashboard')}</h1>
+                        
+                        <div className="flex items-center gap-4">
+                            {/* Language Toggle */}
+                            <button
+                                onClick={toggleLanguage}
+                                className="p-2 text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-slate-700 rounded-full transition-colors flex items-center gap-2"
+                            >
+                                <Languages size={20} />
+                                <span className="text-sm font-medium">{language === 'en' ? 'UR' : 'EN'}</span>
+                            </button>
+
+                            {/* Dark Mode Toggle */}
+                            <button
+                                onClick={toggleDarkMode}
+                                className="p-2 text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-slate-700 rounded-full transition-colors"
+                            >
+                                {darkMode ? <Sun size={20} /> : <Moon size={20} />}
+                            </button>
+
+                            {/* Notifications */}
+                            <div className="relative">
+                                <button 
+                                    onClick={() => setShowNotifications(!showNotifications)}
+                                    className="p-2 text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-slate-700 rounded-full relative transition-colors"
+                                >
+                                    <Bell size={20} />
+                                    {unread_notifications > 0 && (
+                                        <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white dark:border-slate-800"></span>
+                                    )}
+                                </button>
+                                
+                                {showNotifications && (
+                                    <div className="absolute right-0 mt-2 w-80 bg-white dark:bg-slate-800 rounded-xl shadow-xl border dark:border-slate-700 overflow-hidden z-50 animate-fadeIn">
+                                        <div className="p-4 border-b dark:border-slate-700 flex justify-between items-center">
+                                            <h3 className="font-semibold">{t('notifications')}</h3>
+                                            <button onClick={() => setShowNotifications(false)}><X size={16} /></button>
+                                        </div>
+                                        <div className="max-h-96 overflow-y-auto">
+                                            {notifications.length === 0 ? (
+                                                <div className="p-8 text-center text-gray-500 text-sm">{t('noNotifications')}</div>
+                                            ) : (
+                                                notifications.map(n => (
+                                                    <div key={n.id} className={`p-4 border-b dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-700/50 ${!n.is_read ? 'bg-indigo-50/50 dark:bg-indigo-900/10' : ''}`}>
+                                                        <p className="font-medium text-sm mb-1">{n.title}</p>
+                                                        <p className="text-xs text-gray-500 dark:text-gray-400">{n.message}</p>
+                                                        <p className="text-[10px] text-gray-400 mt-2">{new Date(n.created_at).toLocaleString()}</p>
+                                                    </div>
+                                                ))
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                            
+                            {/* Profile */}
+                            <div className="flex items-center gap-3 pl-4 border-l dark:border-slate-700">
+                                <div className="text-right hidden sm:block">
+                                    <p className="text-sm font-medium">{customer.full_name}</p>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400">{customer.customer_code}</p>
+                                </div>
+                                <div className="w-10 h-10 bg-indigo-100 dark:bg-indigo-900/50 rounded-full flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-bold">
+                                    {customer.full_name.charAt(0)}
+                                </div>
+                                <button onClick={handleLogout} className="p-2 text-gray-400 hover:text-red-500 transition-colors">
+                                    <LogOut size={20} />
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </nav>
+
+                {/* Dashboard Content */}
+                <div className="p-6 space-y-6">
+                    {/* Status Banners */}
+                    {isPending && (
+                        <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-2xl p-6 flex flex-col sm:flex-row items-center gap-6 animate-fadeIn">
+                            <div className="p-4 bg-yellow-100 dark:bg-yellow-900/40 rounded-full">
+                                <Clock className="text-yellow-600 dark:text-yellow-400" size={32} />
+                            </div>
+                            <div className="flex-1 text-center sm:text-left">
+                                <h2 className="text-xl font-bold text-yellow-800 dark:text-yellow-200 mb-2">{t('verificationInProgress')}</h2>
+                                <p className="text-yellow-700 dark:text-yellow-300 mb-4">{t('verificationMessage')}</p>
+                                <div className="flex items-center gap-2 justify-center sm:justify-start text-sm font-medium text-yellow-800 dark:text-yellow-200">
+                                    <span className="flex items-center gap-1"><CheckCircle size={16} /> {t('accountCreated')}</span>
+                                    <span className="w-8 h-px bg-yellow-300 dark:bg-yellow-700"></span>
+                                    <span className="flex items-center gap-1"><CheckCircle size={16} /> {t('docsSubmitted')}</span>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {!isPending && (
+                        <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-sm border border-gray-100 dark:border-slate-700 animate-fadeIn">
+                            <div className="flex flex-col sm:flex-row items-center justify-between gap-6">
+                                <div>
+                                    {loan_application ? (
+                                        <>
+                                            <h3 className={`text-2xl font-bold mb-2 ${
+                                                loan_application.status === 'Approved' ? 'text-green-600' : 
+                                                loan_application.status === 'Rejected' ? 'text-red-600' : 'text-yellow-600'
+                                            }`}>
+                                                {t(loan_application.status.toLowerCase())}
+                                            </h3>
+                                            <p className="text-sm text-gray-500 dark:text-gray-400">
+                                                {t('appliedOn')} {new Date(loan_application.created_at).toLocaleDateString()}
+                                            </p>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">{t('noActiveLoan')}</h3>
+                                            <p className="text-gray-500 dark:text-gray-400 mb-4">{t('applyForLoanMsg') || "Apply for a loan to get started."}</p>
+                                            <button 
+                                                onClick={() => setCurrentPage('loan')}
+                                                className="text-indigo-600 dark:text-indigo-400 text-sm font-medium hover:underline flex items-center gap-1"
+                                            >
+                                                {t('applyNow')} <ChevronRight size={16} />
+                                            </button>
+                                        </>
+                                    )}
+                                </div>
+                                
+                                {/* Trust Score Card */}
+                                <div className="bg-gradient-to-br from-indigo-600 to-purple-700 rounded-2xl p-6 shadow-lg text-white relative overflow-hidden min-w-[250px]">
+                                    <div className="absolute top-0 right-0 p-4 opacity-20">
+                                        <Lock size={100} />
+                                    </div>
+                                    <div className="relative z-10">
+                                        <p className="text-indigo-100 font-medium mb-1">{t('trustScore')}</p>
+                                        <h3 className="text-4xl font-bold mb-2">{verification?.trust_score || 0}</h3>
+                                        <div className="w-full bg-white/20 rounded-full h-2 mb-4">
+                                            <div 
+                                                className="bg-white h-2 rounded-full transition-all duration-1000" 
+                                                style={{ width: `${verification?.trust_score || 0}%` }}
+                                            ></div>
+                                        </div>
+                                        <p className="text-xs text-indigo-100">{t('basedOnProfile')}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                            {/* Profile and Loan Section */}
+                            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                                {/* Left Column: Profile & Docs */}
+                                <div className="space-y-6">
+                                    {/* Profile Card */}
+                                    <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-700 overflow-hidden">
+                                        <div className="p-6 border-b dark:border-slate-700">
+                                            <h3 className="font-bold text-lg flex items-center gap-2">
+                                                <User size={20} className="text-indigo-600" />
+                                                {t('personalDetails')}
+                                            </h3>
+                                        </div>
+                                        <div className="p-6 space-y-4">
+                                            {[
+                                                { label: t('fullName'), value: customer.full_name },
+                                                { label: t('cnic'), value: customer.cnic },
+                                                { label: t('email'), value: customer.email },
+                                                { label: t('phone'), value: customer.phone },
+                                                { label: t('address'), value: customer.address }
+                                            ].map((item, idx) => (
+                                                <div key={idx}>
+                                                    <p className="text-xs text-gray-500 uppercase tracking-wider">{item.label}</p>
+                                                    <p className="font-medium text-sm">{item.value}</p>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* Documents Card */}
+                                    <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-700 overflow-hidden">
+                                        <div className="p-6 border-b dark:border-slate-700">
+                                            <h3 className="font-bold text-lg flex items-center gap-2">
+                                                <FileText size={20} className="text-indigo-600" />
+                                                {t('documents')}
+                                            </h3>
+                                        </div>
+                                        <div className="p-6 grid grid-cols-2 gap-4">
+                                            {documents.map((doc, idx) => (
+                                                <div key={idx} className="relative group aspect-video bg-gray-100 dark:bg-slate-700 rounded-lg overflow-hidden">
+                                                    <img src={`http://localhost:8000/${doc.file_path}`} alt={doc.doc_type} className="w-full h-full object-cover" />
+                                                    <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-medium">
+                                                        {doc.doc_type}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Right Column: Loan Management */}
+                                <div className="lg:col-span-2">
+                                    {!loan_application && (
+                                        <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-700 overflow-hidden">
+                                            <div className="p-6 border-b dark:border-slate-700 bg-gradient-to-r from-indigo-50 to-white dark:from-slate-800 dark:to-slate-800">
+                                                <h3 className="font-bold text-xl text-indigo-900 dark:text-white mb-1">{t('applyForLoan')}</h3>
+                                                <p className="text-sm text-gray-500 dark:text-gray-400">{t('instantApproval')}</p>
+                                            </div>
+                                            <div className="p-8">
+                                                <form onSubmit={submitLoanApplication} className="space-y-6">
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                                        <div>
+                                                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{t('loanAmount')}</label>
+                                                            <input
+                                                                type="number"
+                                                                required
+                                                                value={loanAmount}
+                                                                onChange={(e) => setLoanAmount(e.target.value)}
+                                                                className="block w-full px-4 py-3 border border-gray-300 dark:border-slate-600 rounded-lg dark:bg-slate-700 focus:ring-indigo-500 focus:border-indigo-500"
+                                                                placeholder="50000"
+                                                            />
+                                                        </div>
+                                                        <div>
+                                                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{t('monthlyIncome')}</label>
+                                                            <input
+                                                                type="number"
+                                                                required
+                                                                value={monthlyIncome}
+                                                                onChange={(e) => setMonthlyIncome(e.target.value)}
+                                                                className="block w-full px-4 py-3 border border-gray-300 dark:border-slate-600 rounded-lg dark:bg-slate-700 focus:ring-indigo-500 focus:border-indigo-500"
+                                                                placeholder="80000"
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{t('loanPurpose')}</label>
+                                                        <select
+                                                            required
+                                                            value={loanPurpose}
+                                                            onChange={(e) => setLoanPurpose(e.target.value)}
+                                                            className="block w-full px-4 py-3 border border-gray-300 dark:border-slate-600 rounded-lg dark:bg-slate-700 focus:ring-indigo-500 focus:border-indigo-500"
+                                                        >
+                                                            <option value="">{t('selectPurpose')}</option>
+                                                            <option value="Personal">{t('personal')}</option>
+                                                            <option value="Business">{t('business')}</option>
+                                                            <option value="Education">{t('education')}</option>
+                                                            <option value="Medical">{t('medical')}</option>
+                                                            <option value="Home">{t('home')}</option>
+                                                        </select>
+                                                    </div>
+                                                    <button
+                                                        type="submit"
+                                                        disabled={isSubmittingLoan}
+                                                        className="w-full py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium disabled:opacity-50"
+                                                    >
+                                                        {isSubmittingLoan ? t('processing') : t('submitApplication')}
+                                                    </button>
+                                                </form>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {loan_application && (
+                                        <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-700 overflow-hidden">
+                                            <div className="p-6 border-b dark:border-slate-700 flex justify-between items-center">
+                                                <h3 className="font-bold text-lg">{t('loanDetails')}</h3>
+                                                <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                                                    loan_application.status === 'Approved' ? 'bg-green-100 text-green-800' :
+                                                    loan_application.status === 'Rejected' ? 'bg-red-100 text-red-800' :
+                                                    'bg-yellow-100 text-yellow-800'
+                                                }`}>
+                                                    {t(loan_application.status.toLowerCase())}
+                                                </span>
+                                            </div>
+                                            <div className="p-6">
+                                                <div className="grid grid-cols-2 gap-6 mb-6">
+                                                    <div>
+                                                        <p className="text-xs text-gray-500 uppercase">{t('amount')}</p>
+                                                        <p className="text-xl font-bold">PKR {loan_application.amount.toLocaleString()}</p>
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-xs text-gray-500 uppercase">{t('purpose')}</p>
+                                                        <p className="font-medium">{loan_application.purpose}</p>
+                                                    </div>
+                                                </div>
+
+                                                {loan_application.status === 'Approved' && (
+                                                    <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl p-6 text-center">
+                                                        <div className="w-12 h-12 bg-green-100 dark:bg-green-900/40 rounded-full flex items-center justify-center mx-auto mb-4">
+                                                            <CheckCircle className="text-green-600 dark:text-green-400" size={24} />
+                                                        </div>
+                                                        <h4 className="text-lg font-bold text-green-800 dark:text-green-200 mb-2">{t('congratulations')}</h4>
+                                                        <p className="text-green-700 dark:text-green-300 text-sm mb-6">{t('fundsReady')}</p>
+                                                        <button 
+                                                            onClick={() => window.open(`/api/dashboard/loan/download-pdf/${loan_application.id}`, '_blank')}
+                                                            className="inline-flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors shadow-md"
+                                                        >
+                                                            <Download size={18} className="mr-2" />
+                                                            {t('downloadApproval')}
+                                                        </button>
+                                                    </div>
+                                                )}
+
+                                                {loan_application.status === 'Rejected' && (
+                                                    <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-6">
+                                                        <div className="flex items-start gap-4">
+                                                            <AlertCircle className="text-red-600 dark:text-red-400 flex-shrink-0" size={24} />
+                                                            <div>
+                                                                <h4 className="text-lg font-bold text-red-800 dark:text-red-200 mb-1">{t('applicationRejected')}</h4>
+                                                                <p className="text-red-700 dark:text-red-300 text-sm mb-4">{t('couldNotApprove')}</p>
+                                                                <div className="bg-white/50 dark:bg-black/20 p-3 rounded-lg text-sm text-red-800 dark:text-red-200 font-mono mb-4">
+                                                                    {t('reason')}: {loan_application.rejection_reason || "Internal Policy Criteria"}
+                                                                </div>
+                                                                <button 
+                                                                    onClick={() => window.open(`/api/dashboard/loan/download-pdf/${loan_application.id}`, '_blank')}
+                                                                    className="text-red-700 dark:text-red-300 text-sm font-medium hover:underline flex items-center gap-1"
+                                                                >
+                                                                    <Download size={16} /> {t('downloadRejection')}
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Security Section */}
+                                    <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-700 p-6 mt-6">
+                                        <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
+                                            <Lock size={20} className="text-indigo-600" />
+                                            {t('security')}
+                                        </h3>
+                                        <div className="bg-gray-50 dark:bg-slate-700/50 rounded-lg p-4 flex items-center justify-between">
+                                            <div>
+                                                <p className="text-sm font-medium text-gray-700 dark:text-gray-300">{t('customerKey')}</p>
+                                                <p className="font-mono text-xs text-gray-500">{t('useForSupport')}</p>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <code className="bg-white dark:bg-slate-800 px-2 py-1 rounded border dark:border-slate-600 text-sm font-mono">
+                                                    {customer.customer_code}
+                                                </code>
+                                                <button 
+                                                    onClick={() => navigator.clipboard.writeText(customer.customer_code)}
+                                                    className="text-indigo-600 hover:text-indigo-800 text-xs font-medium"
+                                                >
+                                                    {t('copy')}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                </div>
+            </main>
+
+            {/* AI Chat Popup */}
+            {showAIChat && (
+                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setShowAIChat(false)}>
+                    <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl max-w-md w-full h-[600px] flex flex-col" onClick={(e) => e.stopPropagation()}>
+                        <div className="p-4 border-b dark:border-slate-700 flex justify-between items-center">
+                            <div className="flex items-center gap-3">
+                                <div className="bg-indigo-100 dark:bg-indigo-900/50 p-2 rounded-full">
+                                    <MessageCircle className="text-indigo-600 dark:text-indigo-400" size={20} />
+                                </div>
+                                <div>
+                                    <h3 className="font-semibold">AI Assistant</h3>
+                                    <p className="text-xs text-gray-500">How can I help you?</p>
+                                </div>
+                            </div>
+                            <button onClick={() => setShowAIChat(false)} className="text-gray-400 hover:text-gray-600">
+                                <X size={24} />
+                            </button>
+                        </div>
+                        
+                        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                            {chatMessages.length === 0 && (
+                                <div className="text-center text-gray-500 text-sm mt-8">
+                                    <p>Ask me anything about your account,</p>
+                                    <p>loans, or documents!</p>
+                                </div>
+                            )}
+                            
+                            {chatMessages.map((msg, idx) => (
+                                <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                                    <div className={`max-w-[80%] px-4 py-2 rounded-2xl ${
+                                        msg.role === 'user' 
+                                            ? 'bg-indigo-600 text-white' 
+                                            : 'bg-gray-100 dark:bg-slate-700 text-gray-900 dark:text-white'
+                                    }`}>
+                                        {msg.text}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                        
+                        <div className="p-4 border-t dark:border-slate-700">
+                            <div className="flex gap-2">
+                                <input
+                                    type="text"
+                                    value={chatInput}
+                                    onChange={(e) => setChatInput(e.target.value)}
+                                    onKeyPress={(e) => e.key === 'Enter' && sendChatMessage()}
+                                    placeholder="Type your message..."
+                                    className="flex-1 px-4 py-2 border border-gray-300 dark:border-slate-600 rounded-lg dark:bg-slate-700 focus:ring-indigo-500 focus:border-indigo-500"
+                                />
+                                <button 
+                                    onClick={sendChatMessage}
+                                    className="p-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+                                >
+                                    <Send size={20} />
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
+export default CustomerDashboard;

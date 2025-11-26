@@ -1,0 +1,4 @@
+id,customer_id,status,risk_score,trust_score,remarks,verified_by,updated_at
+1,1,Verified,10,90,hell yea,admin,2025-11-22 18:17:16
+2,2,Pending,0,0,,,2025-11-22 18:52:53
+3,3,Pending,0,0,,,2025-11-22 19:20:35

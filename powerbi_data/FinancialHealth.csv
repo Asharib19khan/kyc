@@ -1,0 +1,4 @@
+id,customer_id,spending_score,savings_rate,predicted_balance,updated_at
+1,1,77,23,99420.0,2025-11-23 04:13:22
+2,2,82,12,90690.0,2025-11-23 04:13:22
+3,3,71,28,169496.0,2025-11-23 04:13:22

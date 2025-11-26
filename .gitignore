@@ -1,0 +1,41 @@
+# Dependencies
+node_modules/
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# Environment variables
+.env
+secret.key
+
+# Database and sensitive data
+*.sqlite3
+*.db
+data/
+code.txt
+
+# Build outputs
+dist/
+build/
+frontend/dist/
+
+# System
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
+debug_output.txt
+
+# Test/Debug files (not for production)
+test_*.py
+debug_*.py
+check_*.py
+list_*.py
+clear_*.py
+verify_*.py

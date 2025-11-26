@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: neobank-backend
+    runtime: python
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: TWILIO_WHATSAPP_FROM
+        value: whatsapp:+14155238886
+      - key: ADMIN_WHATSAPP_NUMBER
+        sync: false
+      - key: EMAIL_SENDER
+        sync: false
+      - key: EMAIL_APP_PASSWORD
+        sync: false
+    disk:
+      name: data
+      mountPath: /opt/render/project/src/data
+      sizeGB: 1

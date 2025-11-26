@@ -1,0 +1,805 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
+import axios from 'axios';
+import {
+    MapPin, Upload, CheckCircle, AlertCircle, RefreshCw, X,
+    Moon, Sun, ChevronRight, ChevronLeft, FileText, User, Shield,
+    CreditCard, Calendar, Phone, Mail, Lock, Home, Eye, EyeOff
+} from 'lucide-react';
+
+// --- Helper Components ---
+
+const InputField = ({ label, name, type = "text", value, onChange, placeholder, icon: Icon, required = false, error }) => {
+    const [showPassword, setShowPassword] = useState(false);
+    const isPassword = type === "password";
+
+    return (
+        <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                {label} {required && <span className="text-red-500">*</span>}
+            </label>
+            <div className="relative rounded-md shadow-sm">
+                {Icon && (
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <Icon className="h-5 w-5 text-gray-400" />
+                    </div>
+                )}
+                <input
+                    type={isPassword && showPassword ? "text" : type}
+                    name={name}
+                    value={value}
+                    onChange={onChange}
+                    className={`block w-full ${Icon ? 'pl-10' : 'pl-3'} pr-10 py-3 border ${error ? 'border-red-300 focus:ring-red-500 focus:border-red-500' : 'border-gray-300 dark:border-slate-600 focus:ring-indigo-500 focus:border-indigo-500'} rounded-lg dark:bg-slate-700 dark:text-white transition-all duration-200 sm:text-sm`}
+                    placeholder={placeholder}
+                />
+                {isPassword && (
+                    <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 cursor-pointer"
+                    >
+                        {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
+                )}
+            </div>
+            {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
+        </div>
+    );
+};
+
+const FileUploadBox = ({ label, type, file, onChange, preview }) => {
+    const inputRef = useRef(null);
+    const [isDragging, setIsDragging] = useState(false);
+
+    const handleDragOver = (e) => {
+        e.preventDefault();
+        setIsDragging(true);
+    };
+
+    const handleDragLeave = () => {
+        setIsDragging(false);
+    };
+
+    const handleDrop = (e) => {
+        e.preventDefault();
+        setIsDragging(false);
+        if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+            onChange(e.dataTransfer.files[0], type);
+        }
+    };
+
+    return (
+        <div className="mb-6">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{label}</label>
+            <div
+                onClick={() => inputRef.current.click()}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                className={`relative border-2 border-dashed rounded-xl p-6 flex flex-col items-center justify-center cursor-pointer transition-all duration-200 
+                    ${isDragging ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20' : 'border-gray-300 dark:border-slate-600 hover:border-indigo-400 hover:bg-gray-50 dark:hover:bg-slate-700'}
+                    ${file ? 'bg-green-50 dark:bg-green-900/10 border-green-400' : ''}
+                `}
+            >
+                <input
+                    type="file"
+                    ref={inputRef}
+                    className="hidden"
+                    onChange={(e) => onChange(e.target.files[0], type)}
+                    accept="image/*"
+                />
+
+                {file ? (
+                    <div className="text-center">
+                        {preview ? (
+                            <img src={preview} alt="Preview" className="h-32 object-contain mx-auto mb-2 rounded-md shadow-sm" />
+                        ) : (
+                            <CheckCircle className="h-10 w-10 text-green-500 mx-auto mb-2" />
+                        )}
+                        <p className="text-sm font-medium text-green-700 dark:text-green-400 truncate max-w-[200px]">{file.name}</p>
+                        <p className="text-xs text-gray-500 mt-1">Click or drag to replace</p>
+                    </div>
+                ) : (
+                    <div className="text-center">
+                        <Upload className="h-10 w-10 text-gray-400 mx-auto mb-2" />
+                        <p className="text-sm font-medium text-gray-900 dark:text-white">Click to upload or drag and drop</p>
+                        <p className="text-xs text-gray-500 mt-1">SVG, PNG, JPG or GIF (max. 5MB)</p>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+};
+
+// --- Main Component ---
+
+const Register = () => {
+    const navigate = useNavigate();
+
+    // --- State ---
+    const [step, setStep] = useState(0); // 0: Personal, 1: Documents, 2: Review, 3: Customer Code
+    const [darkMode, setDarkMode] = useState(false);
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [customerCode, setCustomerCode] = useState('');
+    const [customerId, setCustomerId] = useState(null);
+    const [isLocating, setIsLocating] = useState(false);
+    const [isExtracting, setIsExtracting] = useState(false);
+
+    const [formData, setFormData] = useState({
+        full_name: '',
+        father_name: '',
+        cnic: '',
+        dob: '',
+        email: '',
+        phone: '',
+        password: '',
+        address: '',
+        income_range: '50k-100k',
+        latitude: null,
+        longitude: null
+    });
+
+    const [files, setFiles] = useState({});
+    const [previews, setPreviews] = useState({});
+    const [errors, setErrors] = useState({});
+
+    // AI Modal State
+    const [showAiModal, setShowAiModal] = useState(false);
+    const [extractedData, setExtractedData] = useState(null);
+
+    // --- Effects ---
+    useEffect(() => {
+        if (localStorage.getItem('theme') === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+            setDarkMode(true);
+            document.documentElement.classList.add('dark');
+        }
+    }, []);
+
+    // --- Handlers ---
+
+    const toggleDarkMode = () => {
+        if (darkMode) {
+            document.documentElement.classList.remove('dark');
+            localStorage.setItem('theme', 'light');
+            setDarkMode(false);
+        } else {
+            document.documentElement.classList.add('dark');
+            localStorage.setItem('theme', 'dark');
+            setDarkMode(true);
+        }
+    };
+
+    const handleChange = (e) => {
+        let { name, value } = e.target;
+
+        // Auto-formatting
+        if (name === 'cnic') {
+            // Format: 00000-0000000-0
+            const raw = value.replace(/\D/g, '').substring(0, 13);
+            if (raw.length > 5 && raw.length <= 12) {
+                value = `${raw.slice(0, 5)}-${raw.slice(5)}`;
+            } else if (raw.length > 12) {
+                value = `${raw.slice(0, 5)}-${raw.slice(5, 12)}-${raw.slice(12)}`;
+            } else {
+                value = raw;
+            }
+        }
+
+        if (name === 'phone') {
+            // Simple format check or just allow numbers
+            value = value.replace(/[^\d+]/g, '');
+        }
+
+        setFormData({ ...formData, [name]: value });
+        if (errors[name]) setErrors({ ...errors, [name]: null });
+    };
+
+    const handleFileSelect = (file, type) => {
+        if (!file) return;
+        setFiles({ ...files, [type]: file });
+
+        // Create preview
+        const reader = new FileReader();
+        reader.onloadend = () => {
+            setPreviews(prev => ({ ...prev, [type]: reader.result }));
+        };
+        reader.readAsDataURL(file);
+    };
+
+    const validateStep = (currentStep) => {
+        const newErrors = {};
+        let isValid = true;
+
+        if (currentStep === 0) {
+            if (!formData.full_name) newErrors.full_name = "Full Name is required";
+            if (!formData.cnic) newErrors.cnic = "CNIC is required";
+            else if (formData.cnic.length !== 15) newErrors.cnic = "Invalid CNIC format";
+            if (!formData.email) newErrors.email = "Email is required";
+            if (!formData.phone) newErrors.phone = "Phone is required";
+            if (!formData.password) newErrors.password = "Password is required";
+            if (!formData.address) newErrors.address = "Address is required";
+        }
+
+        if (currentStep === 1) {
+            if (!files['CNIC_Front']) newErrors.cnic_front = "CNIC Front is required";
+            if (!files['CNIC_Back']) newErrors.cnic_back = "CNIC Back is required";
+            if (!files['Selfie']) newErrors.selfie = "Selfie is required";
+        }
+
+        if (Object.keys(newErrors).length > 0) {
+            setErrors(newErrors);
+            isValid = false;
+        }
+
+        return isValid;
+    };
+
+    const nextStep = () => {
+        if (validateStep(step)) {
+            setStep(step + 1);
+            window.scrollTo(0, 0);
+        }
+    };
+
+    const prevStep = () => {
+        setStep(step - 1);
+        window.scrollTo(0, 0);
+    };
+
+    // --- Feature Handlers ---
+
+    const getLocation = () => {
+        setIsLocating(true);
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                async (position) => {
+                    const lat = position.coords.latitude;
+                    const lon = position.coords.longitude;
+
+                    setFormData(prev => ({ ...prev, latitude: lat, longitude: lon }));
+
+                    try {
+                        const res = await axios.get(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`);
+                        if (res.data && res.data.display_name) {
+                            setFormData(prev => ({ ...prev, address: res.data.display_name }));
+                        }
+                    } catch (error) {
+                        console.error("Reverse geocoding failed:", error);
+                    } finally {
+                        setIsLocating(false);
+                    }
+                },
+                (error) => {
+                    alert("Could not get location. Please allow location access.");
+                    setIsLocating(false);
+                }
+            );
+        } else {
+            alert("Geolocation is not supported.");
+            setIsLocating(false);
+        }
+    };
+
+    const handleAiAutoFill = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        setIsExtracting(true);
+        const uploadData = new FormData();
+        uploadData.append('file', file);
+
+        try {
+            const res = await axios.post('/api/kyc/extract-cnic', uploadData);
+            setExtractedData(res.data);
+            setShowAiModal(true);
+
+            // Auto-set the file
+            setFiles(prev => ({ ...prev, 'CNIC_Front': file }));
+            const reader = new FileReader();
+            reader.onloadend = () => setPreviews(prev => ({ ...prev, 'CNIC_Front': reader.result }));
+            reader.readAsDataURL(file);
+
+        } catch (err) {
+            console.error(err);
+            alert("AI Extraction Failed.");
+        } finally {
+            setIsExtracting(false);
+        }
+    };
+
+    const confirmAiData = () => {
+        if (extractedData) {
+            // Auto-fill the form data immediately
+            setFormData(prev => ({
+                ...prev,
+                full_name: extractedData.name || prev.full_name,
+                father_name: extractedData.father_name || prev.father_name,
+                cnic: extractedData.cnic || prev.cnic,
+                dob: extractedData.dob || prev.dob,
+                address: extractedData.address || prev.address
+            }));
+            setShowAiModal(false);
+        }
+    };
+
+    // Auto-apply extracted data without modal
+    const applyExtractedDataDirectly = (data) => {
+        setFormData(prev => ({
+            ...prev,
+            full_name: data.name || prev.full_name,
+            cnic: data.cnic || prev.cnic
+        }));
+    };
+
+    const handleSubmit = async () => {
+        alert("Button clicked! Starting registration...");
+        console.log("=== STARTING REGISTRATION ===");
+        setIsSubmitting(true);
+        try {
+            const data = new FormData();
+            Object.keys(formData).forEach(key => {
+                if (formData[key] !== null) data.append(key, formData[key]);
+            });
+
+            console.log("Sending registration request...");
+            const res = await axios.post('/api/kyc/register', data);
+            console.log("Registration response:", res.data);
+            
+            const cust_id = res.data.customer_id;
+            const cust_code = res.data.customer_code;
+            
+            console.log("Customer ID:", cust_id);
+            console.log("Customer Code:", cust_code);
+
+            console.log("Uploading files...");
+            for (const [type, file] of Object.entries(files)) {
+                const fileData = new FormData();
+                fileData.append('doc_type', type);
+                fileData.append('file', file);
+                await axios.post(`/api/kyc/upload/${cust_id}`, fileData);
+                console.log(`Uploaded ${type}`);
+            }
+
+            // Store customer code and move to Step 4
+            console.log("Setting customer code and navigating to Step 4...");
+            setCustomerId(cust_id);
+            setCustomerCode(cust_code);
+            setStep(3); // Move to Step 4 (Customer Code Display)
+            console.log("Step set to 3 (Step 4)");
+            window.scrollTo(0, 0);
+        } catch (err) {
+            console.error("Registration error:", err);
+            console.error("Error response:", err.response);
+            const msg = err.response?.data?.detail || 'Registration Failed';
+            alert(`Error: ${msg}`);
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    const copyToClipboard = () => {
+        navigator.clipboard.writeText(customerCode);
+        alert('Customer code copied to clipboard!');
+    };
+
+    // --- Render Steps ---
+
+    const renderStepIndicator = () => (
+        <div className="flex items-center justify-between mb-8 px-2">
+            {['Personal Info', 'Documents', 'Review', 'Your Code'].map((label, index) => (
+                <div key={index} className="flex flex-col items-center relative z-10">
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm transition-all duration-300 
+                        ${step === index ? 'bg-indigo-600 text-white shadow-lg ring-4 ring-indigo-100 dark:ring-indigo-900' :
+                            step > index ? 'bg-green-500 text-white' : 'bg-gray-200 dark:bg-slate-700 text-gray-500'}`}
+                    >
+                        {step > index ? <CheckCircle size={20} /> : index + 1}
+                    </div>
+                    <span className={`mt-2 text-xs font-medium ${step === index ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-500'}`}>
+                        {label}
+                    </span>
+                </div>
+            ))}
+            {/* Progress Bar Line */}
+            <div className="absolute top-5 left-0 w-full h-1 bg-gray-200 dark:bg-slate-700 -z-0 hidden sm:block">
+                <div
+                    className="h-full bg-indigo-600 transition-all duration-300"
+                    style={{ width: `${(step / 3) * 100}%` }}
+                />
+            </div>
+        </div>
+    );
+
+    const renderPersonalInfo = () => (
+        <div className="space-y-4 animate-fadeIn">
+            <div className="flex justify-end mb-4">
+                <button
+                    type="button"
+                    onClick={() => document.getElementById('ai-upload-btn').click()}
+                    className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white px-4 py-2 rounded-lg text-sm hover:shadow-lg transition-all flex items-center gap-2"
+                >
+                    {isExtracting ? <RefreshCw className="animate-spin" size={16} /> : <><Upload size={16} /> Auto-Fill from CNIC</>}
+                </button>
+                <input type="file" id="ai-upload-btn" className="hidden" onChange={handleAiAutoFill} accept="image/*" />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <InputField label="Full Name" name="full_name" value={formData.full_name} onChange={handleChange} icon={User} required error={errors.full_name} />
+                <InputField label="Father's Name" name="father_name" value={formData.father_name} onChange={handleChange} icon={User} />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <InputField label="CNIC Number" name="cnic" value={formData.cnic} onChange={handleChange} placeholder="00000-0000000-0" icon={CreditCard} required error={errors.cnic} />
+                
+                <div className="mb-4">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Date of Birth <span className="text-red-500">*</span>
+                    </label>
+                    <div className="grid grid-cols-3 gap-2">
+                        {/* Day */}
+                        <select
+                            name="dob_day"
+                            value={formData.dob ? formData.dob.split('-')[0] : ''}
+                            onChange={(e) => {
+                                const day = e.target.value;
+                                const month = formData.dob ? formData.dob.split('-')[1] : '01';
+                                const year = formData.dob ? formData.dob.split('-')[2] : '2000';
+                                setFormData(prev => ({ ...prev, dob: `${day}-${month}-${year}` }));
+                            }}
+                            className="block w-full px-3 py-3 border border-gray-300 dark:border-slate-600 rounded-lg dark:bg-slate-700 dark:text-white transition-all duration-200 sm:text-sm focus:ring-indigo-500 focus:border-indigo-500"
+                        >
+                            <option value="">Day</option>
+                            {Array.from({ length: 31 }, (_, i) => i + 1).map(day => (
+                                <option key={day} value={String(day).padStart(2, '0')}>{day}</option>
+                            ))}
+                        </select>
+
+                        {/* Month */}
+                        <select
+                            name="dob_month"
+                            value={formData.dob ? formData.dob.split('-')[1] : ''}
+                            onChange={(e) => {
+                                const month = e.target.value;
+                                const day = formData.dob ? formData.dob.split('-')[0] : '01';
+                                const year = formData.dob ? formData.dob.split('-')[2] : '2000';
+                                setFormData(prev => ({ ...prev, dob: `${day}-${month}-${year}` }));
+                            }}
+                            className="block w-full px-3 py-3 border border-gray-300 dark:border-slate-600 rounded-lg dark:bg-slate-700 dark:text-white transition-all duration-200 sm:text-sm focus:ring-indigo-500 focus:border-indigo-500"
+                        >
+                            <option value="">Month</option>
+                            {['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].map((month, idx) => (
+                                <option key={idx} value={String(idx + 1).padStart(2, '0')}>{month}</option>
+                            ))}
+                        </select>
+
+                        {/* Year */}
+                        <select
+                            name="dob_year"
+                            value={formData.dob ? formData.dob.split('-')[2] : ''}
+                            onChange={(e) => {
+                                const year = e.target.value;
+                                const day = formData.dob ? formData.dob.split('-')[0] : '01';
+                                const month = formData.dob ? formData.dob.split('-')[1] : '01';
+                                setFormData(prev => ({ ...prev, dob: `${day}-${month}-${year}` }));
+                            }}
+                            className="block w-full px-3 py-3 border border-gray-300 dark:border-slate-600 rounded-lg dark:bg-slate-700 dark:text-white transition-all duration-200 sm:text-sm focus:ring-indigo-500 focus:border-indigo-500"
+                        >
+                            <option value="">Year</option>
+                            {Array.from({ length: 2007 - 1950 + 1 }, (_, i) => 2007 - i).map(year => (
+                                <option key={year} value={year}>{year}</option>
+                            ))}
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <InputField label="Email Address" name="email" type="email" value={formData.email} onChange={handleChange} icon={Mail} required error={errors.email} />
+                <InputField label="Phone Number" name="phone" value={formData.phone} onChange={handleChange} icon={Phone} required error={errors.phone} />
+            </div>
+
+            <InputField label="Password" name="password" type="password" value={formData.password} onChange={handleChange} icon={Lock} required error={errors.password} />
+
+            <div className="relative">
+                <InputField label="Home Address" name="address" value={formData.address} onChange={handleChange} icon={Home} required error={errors.address} />
+                <button
+                    type="button"
+                    onClick={getLocation}
+                    className="absolute top-8 right-2 p-2 text-indigo-600 hover:text-indigo-800 dark:text-indigo-400"
+                    title="Locate Me"
+                >
+                    {isLocating ? <RefreshCw className="animate-spin" size={20} /> : <MapPin size={20} />}
+                </button>
+            </div>
+        </div>
+    );
+
+    const renderDocuments = () => (
+        <div className="space-y-6 animate-fadeIn">
+            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Upload Verification Documents</h3>
+
+            <FileUploadBox
+                label="CNIC Front Side"
+                type="CNIC_Front"
+                file={files['CNIC_Front']}
+                onChange={handleFileSelect}
+                preview={previews['CNIC_Front']}
+            />
+            {errors.cnic_front && <p className="text-red-500 text-sm -mt-4">{errors.cnic_front}</p>}
+
+            <FileUploadBox
+                label="CNIC Back Side"
+                type="CNIC_Back"
+                file={files['CNIC_Back']}
+                onChange={handleFileSelect}
+                preview={previews['CNIC_Back']}
+            />
+            {errors.cnic_back && <p className="text-red-500 text-sm -mt-4">{errors.cnic_back}</p>}
+
+            <FileUploadBox
+                label="Your Selfie"
+                type="Selfie"
+                file={files['Selfie']}
+                onChange={handleFileSelect}
+                preview={previews['Selfie']}
+            />
+            {errors.selfie && <p className="text-red-500 text-sm -mt-4">{errors.selfie}</p>}
+        </div>
+    );
+
+    const renderReview = () => (
+        <div className="space-y-6 animate-fadeIn">
+            <div className="bg-gray-50 dark:bg-slate-700/50 rounded-xl p-6 space-y-4">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white border-b pb-2 dark:border-slate-600">Personal Details</h3>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                        <p className="text-gray-500 dark:text-gray-400">Full Name</p>
+                        <p className="font-medium text-gray-900 dark:text-white">{formData.full_name}</p>
+                    </div>
+                    <div>
+                        <p className="text-gray-500 dark:text-gray-400">CNIC</p>
+                        <p className="font-medium text-gray-900 dark:text-white">{formData.cnic}</p>
+                    </div>
+                    <div>
+                        <p className="text-gray-500 dark:text-gray-400">Email</p>
+                        <p className="font-medium text-gray-900 dark:text-white">{formData.email}</p>
+                    </div>
+                    <div>
+                        <p className="text-gray-500 dark:text-gray-400">Phone</p>
+                        <p className="font-medium text-gray-900 dark:text-white">{formData.phone}</p>
+                    </div>
+                    <div className="col-span-2">
+                        <p className="text-gray-500 dark:text-gray-400">Address</p>
+                        <p className="font-medium text-gray-900 dark:text-white">{formData.address}</p>
+                    </div>
+                </div>
+            </div>
+
+            <div className="bg-gray-50 dark:bg-slate-700/50 rounded-xl p-6">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white border-b pb-4 mb-4 dark:border-slate-600">Documents</h3>
+                <div className="grid grid-cols-3 gap-4">
+                    {['CNIC_Front', 'CNIC_Back', 'Selfie'].map(type => (
+                        <div key={type} className="text-center">
+                            <div className="aspect-video bg-gray-200 dark:bg-slate-600 rounded-lg mb-2 overflow-hidden flex items-center justify-center">
+                                {previews[type] ? (
+                                    <img src={previews[type]} alt={type} className="w-full h-full object-cover" />
+                                ) : (
+                                    <FileText className="text-gray-400" />
+                                )}
+                            </div>
+                            <p className="text-xs text-gray-500 dark:text-gray-400">{type.replace('_', ' ')}</p>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        </div>
+    );
+
+    const renderCustomerCode = () => (
+        <div className="space-y-6 animate-fadeIn">
+            <div className="text-center mb-8">
+                <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-green-100 dark:bg-green-900/30 mb-4">
+                    <CheckCircle className="text-green-600 dark:text-green-400" size={40} />
+                </div>
+                <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Registration Successful!</h2>
+                <p className="text-gray-600 dark:text-gray-400">Your account has been created successfully.</p>
+            </div>
+
+            <div className="bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20 rounded-xl p-8 border-2 border-indigo-200 dark:border-indigo-800">
+                <div className="flex items-center gap-3 mb-4">
+                    <Shield className="text-indigo-600 dark:text-indigo-400" size={24} />
+                    <h3 className="text-lg font-bold text-gray-900 dark:text-white">Your Unique Customer Code</h3>
+                </div>
+                
+                <div className="bg-white dark:bg-slate-800 rounded-lg p-6 mb-4 border border-indigo-300 dark:border-indigo-700">
+                    <div className="flex items-center justify-between">
+                        <code className="text-3xl font-mono font-bold text-indigo-600 dark:text-indigo-400 tracking-wider">
+                            {customerCode}
+                        </code>
+                        <button
+                            onClick={copyToClipboard}
+                            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-all"
+                        >
+                            <FileText size={18} />
+                            Copy
+                        </button>
+                    </div>
+                </div>
+
+                <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4 mb-4">
+                    <div className="flex gap-3">
+                        <AlertCircle className="text-yellow-600 dark:text-yellow-400 flex-shrink-0" size={20} />
+                        <div className="text-sm text-yellow-800 dark:text-yellow-200">
+                            <p className="font-semibold mb-1">⚠️ IMPORTANT - Save This Code!</p>
+                            <ul className="list-disc list-inside space-y-1 text-xs">
+                                <li>You will need this code to login along with your CNIC and password</li>
+                                <li>Store it in a safe and accessible place</li>
+                                <li>Do NOT share this code with anyone</li>
+                                <li>This code cannot be recovered if lost</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <button
+                    onClick={() => navigate('/')}
+                    className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 shadow-md hover:shadow-lg transition-all transform hover:-translate-y-0.5"
+                >
+                    <CheckCircle size={20} />
+                    Continue to Login
+                </button>
+            </div>
+        </div>
+    );
+
+    const renderInfoPanel = () => {
+        const content = [
+            {
+                title: "Let's get you started",
+                desc: "We need your personal details to verify your identity. Please ensure your name matches your CNIC.",
+                icon: User
+            },
+            {
+                title: "Document Verification",
+                desc: "Please upload clear photos of your CNIC and a selfie. Ensure good lighting and no glare.",
+                icon: Shield
+                    <content.icon size={32} />
+                </div>
+                <h2 className="text-3xl font-bold mb-4">{content.title}</h2>
+                <p className="text-indigo-100 text-lg leading-relaxed">{content.desc}</p>
+
+                <div className="mt-12 space-y-4">
+                    <div className="flex items-center gap-3 text-indigo-200">
+                        <CheckCircle size={20} />
+                        <span>Bank-grade Security</span>
+                    </div>
+                    <div className="flex items-center gap-3 text-indigo-200">
+                        <CheckCircle size={20} />
+                        <span>256-bit Encryption</span>
+                    </div>
+                    <div className="flex items-center gap-3 text-indigo-200">
+                        <CheckCircle size={20} />
+                        <span>NADRA Verified</span>
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
+    return (
+        <div className="min-h-screen bg-gray-100 dark:bg-slate-900 flex items-center justify-center p-4 transition-colors duration-300">
+            {/* Dark Mode Toggle */}
+            <button
+                onClick={toggleDarkMode}
+                className="fixed top-6 right-6 p-3 rounded-full bg-white dark:bg-slate-800 shadow-lg text-gray-800 dark:text-yellow-400 hover:scale-110 transition-transform z-50"
+            >
+                {darkMode ? <Sun size={20} /> : <Moon size={20} />}
+            </button>
+
+            <div className="w-full max-w-6xl bg-white dark:bg-slate-800 rounded-2xl shadow-2xl overflow-hidden flex min-h-[700px]">
+
+                {/* Left Column: Form */}
+                <div className="w-full lg:w-2/3 p-8 sm:p-12 flex flex-col">
+                    <div className="mb-8">
+                        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Create Account</h1>
+                        <p className="text-gray-500 dark:text-gray-400">Complete the steps to verify your identity.</p>
+                    </div>
+
+                    {renderStepIndicator()}
+
+                    <div className="flex-1">
+                        {step === 0 && renderPersonalInfo()}
+                        {step === 1 && renderDocuments()}
+                        {step === 2 && renderReview()}
+                        {step === 3 && renderCustomerCode()}
+                    </div>
+
+                    <div className="mt-8 flex justify-between pt-6 border-t dark:border-slate-700">
+                        <button
+                            onClick={prevStep}
+                            disabled={step === 0 || step === 3}
+                            className={`flex items-center px-6 py-3 rounded-lg text-sm font-medium transition-colors
+                                ${step === 0 || step === 3 ? 'text-gray-300 cursor-not-allowed' : 'text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-slate-700'}`}
+                        >
+                            <ChevronLeft size={18} className="mr-2" /> Back
+                        </button>
+
+                        {step < 2 ? (
+                            <button
+                                onClick={nextStep}
+                                className="flex items-center px-8 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 shadow-md hover:shadow-lg transition-all transform hover:-translate-y-0.5"
+                            >
+                                Next Step <ChevronRight size={18} className="ml-2" />
+                            </button>
+                        ) : step === 2 ? (
+                            <button
+                                onClick={handleSubmit}
+                                disabled={isSubmitting}
+                                className={`flex items-center px-8 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 shadow-md hover:shadow-lg transition-all transform hover:-translate-y-0.5
+                                    ${isSubmitting ? 'opacity-75 cursor-wait' : ''}`}
+                            >
+                                {isSubmitting ? <RefreshCw className="animate-spin mr-2" size={18} /> : <CheckCircle size={18} className="mr-2" />}
+                                {isSubmitting ? 'Submitting...' : 'Complete Registration'}
+                            </button>
+                        ) : null}
+                    </div>
+                </div>
+
+                {/* Right Column: Info Panel */}
+                <div className="w-1/3 hidden lg:block">
+                    {renderInfoPanel()}
+                </div>
+            </div>
+
+            {/* AI Modal */}
+            {showAiModal && extractedData && (
+                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                    <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl max-w-md w-full p-6 animate-scaleIn">
+                        <div className="flex justify-between items-center mb-6">
+                            <div className="flex items-center gap-3">
+                                <div className="bg-green-100 dark:bg-green-900/30 p-2 rounded-full">
+                                    <CheckCircle className="text-green-600 dark:text-green-400" size={24} />
+                                </div>
+                                <h3 className="text-xl font-bold text-gray-900 dark:text-white">Data Extracted</h3>
+                            </div>
+                            <button onClick={() => setShowAiModal(false)} className="text-gray-400 hover:text-gray-600">
+                                <X size={24} />
+                            </button>
+                        </div>
+
+                        {extractedData.note && (
+                            <div className="mb-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 p-3 rounded-lg text-sm text-blue-700 dark:text-blue-300">
+                                ✨ {extractedData.note}
+                            </div>
+                        )}
+
+                        <div className="space-y-3 mb-8">
+                            {[
+                                ['Name', extractedData.name],
+                                ['Father Name', extractedData.father_name],
+                                ['CNIC', extractedData.cnic],
+                                ['DOB', extractedData.dob],
+                                ['Address', extractedData.address]
+                            ].map(([label, val]) => (
+                                <div key={label} className="flex justify-between border-b dark:border-slate-700 pb-2">
+                                    <span className="text-gray-500 dark:text-gray-400 text-sm">{label}</span>
+                                    <span className="font-medium text-gray-900 dark:text-white text-sm text-right truncate max-w-[200px]">{val || '-'}</span>
+                                </div>
+                            ))}
+                        </div>
+
+                        <div className="flex gap-3">
+                            <button onClick={() => setShowAiModal(false)} className="flex-1 py-2.5 border border-gray-300 dark:border-slate-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-slate-700 font-medium">
+                                Discard
+                            </button>
+                            <button onClick={confirmAiData} className="flex-1 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium shadow-lg">
+                                Use This Data
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
+export default Register;

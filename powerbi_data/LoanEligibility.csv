@@ -1,0 +1,2 @@
+id,customer_id,risk_score,income_group,eligibility_status,max_limit,calculated_at
+1,1,10,Unknown,Auto-Approved,50000.0,2025-11-22 18:17:16
