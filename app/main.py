@@ -15,6 +15,8 @@ app = FastAPI(
 origins = [
     "http://localhost:5173", # React Dev Server
     "http://localhost:3000",
+    "https://guiltless-haupia-b5b8f7.netlify.app", # Production Frontend
+    "*"  # Allow all origins for now
 ]
 
 app.add_middleware(
