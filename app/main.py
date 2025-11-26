@@ -54,8 +54,8 @@ def initialize_admin():
     ONE-TIME USE: Creates the first admin user
     Visit this URL once after deployment to create admin account
     """
+    from app import auth
     from app.db import get_conn
-    from app.api.auth import hash_password
     
     conn = get_conn()
     cursor = conn.cursor()
@@ -66,13 +66,13 @@ def initialize_admin():
         conn.close()
         return {"error": "Admin user already exists"}
     
-    # Create admin user
+    # Create admin user using auth module
     username = "Asharib"
     password = "mywordislaw"
-    full_name = "Asharib Khan" 
+    full_name = "Asharib Khan"
     email = "asharib@neobank.com"
     
-    hashed_password = hash_password(password)
+    hashed_password = auth.hash_password(password)
     
     cursor.execute(
         "INSERT INTO Admins (username, password_hash, full_name, email, role) VALUES (?, ?, ?, ?, ?)",
@@ -83,9 +83,10 @@ def initialize_admin():
     conn.close()
     
     return {
-        "success": True, 
+        "success": True,
         "message": "Admin user created successfully",
         "username": username,
         "note": "You can now login with this username and your password"
     }
+
 
