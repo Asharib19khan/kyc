@@ -136,3 +136,47 @@ def initialize_admin():
             "traceback": traceback.format_exc()
         }
 
+@app.get("/api/debug-2fa")
+def debug_2fa():
+    """
+    Debug endpoint to test 2FA sending logic
+    """
+    try:
+        from app import config
+        from app.api.auth import OTP_STORE
+        import random
+        
+        username = "Asharib"
+        code = str(random.randint(100000, 999999))
+        OTP_STORE[username] = code
+        
+        results = {"steps": []}
+        
+        # 1. Test Twilio
+        try:
+            from twilio.rest import Client
+            results["steps"].append("Twilio module imported")
+            
+            client = Client(config.TWILIO_ACCOUNT_SID, config.TWILIO_AUTH_TOKEN)
+            results["steps"].append("Twilio client initialized")
+            
+            message = client.messages.create(
+                from_=config.TWILIO_WHATSAPP_FROM,
+                body=f"🔐 Debug Code: {code}",
+                to=config.ADMIN_WHATSAPP_NUMBER
+            )
+            results["steps"].append(f"Twilio message sent: {message.sid}")
+            results["twilio_success"] = True
+        except Exception as e:
+            results["twilio_error"] = str(e)
+            results["twilio_success"] = False
+            
+        return results
+    except Exception as e:
+        import traceback
+        return {
+            "error": "Debug failed",
+            "detail": str(e),
+            "traceback": traceback.format_exc()
+        }
+
