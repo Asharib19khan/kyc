@@ -54,7 +54,7 @@ def initialize_admin():
     ONE-TIME USE: Creates the first admin user
     Visit this URL once after deployment to create admin account
     """
-    from app.database import get_conn
+    from app.db import get_conn
     from app.api.auth import hash_password
     
     conn = get_conn()
