@@ -166,7 +166,7 @@ async def send_2fa_code(username: str = Form(...)):
 
     # Generate Code
     import random
-    import config
+    from app import config
     
     if getattr(config, 'USE_FIXED_2FA', False):
         code = config.FIXED_2FA_CODE
