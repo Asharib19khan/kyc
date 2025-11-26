@@ -1,0 +1,22 @@
+functions:
+  - name: kyc-backend
+    runtime: python
+    main: app.main:app
+    env:
+      TWILIO_ACCOUNT_SID:
+        value: ""
+      TWILIO_AUTH_TOKEN:
+        value: ""
+      TWILIO_WHATSAPP_FROM:
+        value: "whatsapp:+14155238886"
+      ADMIN_WHATSAPP_NUMBER:
+        value: "whatsapp:+923130028473"
+      SECRET_KEY:
+        value: "changeme"
+    build:
+      command: pip install -r requirements.txt
+    run:
+      command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    ports:
+      - port: 8000
+        protocol: http
