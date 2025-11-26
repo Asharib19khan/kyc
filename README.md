@@ -24,9 +24,16 @@ A secure KYC (Know Your Customer) verification system with admin and customer po
 
 ## Deployment
 
-### Frontend (Vercel)
-1. Push to GitHub
-2. Import repository in Vercel
+### Frontend (Netlify) - Recommended
+1. Import repository in Netlify
+2. **Base directory**: `frontend`
+3. **Build command**: `npm run build`
+4. **Publish directory**: `dist`
+5. Deploy
+
+### Frontend (Vercel) - Alternative
+1. Import repository in Vercel
+2. **Root Directory**: `frontend`
 3. Set framework: Vite
 4. Deploy
 
