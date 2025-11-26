@@ -31,42 +31,14 @@ app.add_middleware(
 os.makedirs("uploads", exist_ok=True)
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
-# Initialize DB and create default admin if needed
+# Initialize DB
 @app.on_event("startup")
 def on_startup():
     init_db()
-    
-    # Auto-create admin user if it doesn't exist
-    from app import auth as app_auth
-    from app.db import get_conn
-    
-    conn = get_conn()
-    cursor = conn.cursor()
-    
-    # Check if any admin exists
-    existing_admin = cursor.execute("SELECT username FROM Admins LIMIT 1").fetchone()
-    
-    if not existing_admin:
-        # Create default admin user
-        username = "Asharib"
-        password = "mywordislaw"
-        full_name = "Asharib Khan"
-        email = "asharib@neobank.com"
-        
-        hashed_password = app_auth.hash_password(password)
-        
-        cursor.execute(
-            "INSERT INTO Admins (username, password_hash, full_name, email, role) VALUES (?, ?, ?, ?, ?)",
-            (username, hashed_password, full_name, email, "super_admin")
-        )
-        conn.commit()
-        print(f"✅ Default admin user '{username}' created successfully!")
-    
-    conn.close()
 
 @app.get("/")
 def root():
-    return {"message": "NeoBank KYC API is running securely.", "admin_ready": True}
+    return {"message": "NeoBank KYC API is running securely."}
 
 # Include Routers
 app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
@@ -74,3 +46,71 @@ app.include_router(kyc.router, prefix="/api/kyc", tags=["kyc"])
 app.include_router(admin.router, prefix="/api/admin", tags=["admin"])
 app.include_router(dashboard.router, prefix="/api", tags=["dashboard"])
 app.include_router(reports.router, prefix="/api/admin", tags=["reports"])
+
+# TEMPORARY: Initialize first admin user (remove after first run)
+@app.get("/api/init-admin")
+def initialize_admin():
+    """
+    ONE-TIME USE: Creates the first admin user
+    Visit this URL once after deployment to create admin account
+    """
+    try:
+        # Debug imports
+        import sys
+        import os
+        
+        # Try importing auth
+        try:
+            from app import auth
+        except ImportError as e:
+            return {"error": f"ImportError app.auth: {str(e)}", "path": sys.path, "cwd": os.getcwd()}
+            
+        # Try importing db
+        try:
+            from app.db import get_conn
+        except ImportError as e:
+            return {"error": f"ImportError app.db: {str(e)}"}
+        
+        conn = get_conn()
+        cursor = conn.cursor()
+        
+        # Check if admin already exists
+        existing = cursor.execute("SELECT * FROM Admins WHERE username = ?", ("Asharib",)).fetchone()
+        if existing:
+            conn.close()
+            return {"error": "Admin user already exists"}
+        
+        # Create admin user using auth module
+        username = "Asharib"
+        password = "mywordislaw"
+        full_name = "Asharib Khan"
+        email = "asharib@neobank.com"
+        
+        try:
+            hashed_password = auth.hash_password(password)
+        except Exception as e:
+            conn.close()
+            return {"error": f"Hashing failed: {str(e)}"}
+        
+        cursor.execute(
+            "INSERT INTO Admins (username, password_hash, full_name, email, role) VALUES (?, ?, ?, ?, ?)",
+            (username, hashed_password, full_name, email, "super_admin")
+        )
+        
+        conn.commit()
+        conn.close()
+        
+        return {
+            "success": True,
+            "message": "Admin user created successfully",
+            "username": username,
+            "note": "You can now login with this username and your password"
+        }
+    except Exception as e:
+        import traceback
+        return {
+            "error": "Unexpected error",
+            "detail": str(e),
+            "traceback": traceback.format_exc()
+        }
+
