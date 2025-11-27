@@ -26,20 +26,39 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from app.db import init_db
+from app.api import auth, kyc, admin, dashboard, reports
+import os
+
+app = FastAPI(
+    title="NeoBank KYC Platform",
+    description="High-Security KYC Verification System with AI and Geolocation",
+    version="2.0.0"
+)
+
+# CORS Configuration
+origins = [
+    "http://localhost:5173", # React Dev Server
+    "http://localhost:3000",
+    "https://kycverificationsystem.netlify.app", # Production Frontend (Current)
+    "https://guiltless-haupia-b5b8f7.netlify.app", # Production Frontend (Old)
+    "*"  # Allow all origins for now
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Mount Static Files for Uploads
 os.makedirs("uploads", exist_ok=True)
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
-
-# Initialize DB
-@app.on_event("startup")
-def on_startup():
-    init_db()
-
-@app.get("/")
-def root():
-    return {"message": "NeoBank KYC API is running securely."}
 
 # Include Routers
 app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
@@ -48,33 +67,72 @@ app.include_router(admin.router, prefix="/api/admin", tags=["admin"])
 app.include_router(dashboard.router, prefix="/api", tags=["dashboard"])
 app.include_router(reports.router, prefix="/api/admin", tags=["reports"])
 
-# TEMPORARY: Initialize first admin user (remove after first run)
-@app.get("/api/init-admin")
-def initialize_admin():
-    """
-    ONE-TIME USE: Creates the first admin user
-    Visit this URL once after deployment to create admin account
-    """
+# Initialize DB and Migrations
+@app.on_event("startup")
+def on_startup():
+    init_db()
+    
+    # Run Migrations Safely
     try:
-        # Debug imports
-        import sys
-        import os
+        from app.db import get_conn
+        import sqlite3
+        conn = get_conn()
+        cursor = conn.cursor()
         
-        # Try importing auth
+        # --- MIGRATIONS FOR CUSTOMERS TABLE ---
         try:
-            from app import auth
-        except ImportError as e:
-            return {"error": f"ImportError app.auth: {str(e)}", "path": sys.path, "cwd": os.getcwd()}
+            cursor.execute("SELECT customer_code FROM Customers LIMIT 1")
+        except sqlite3.OperationalError:
+            print("Migrating: Adding 'customer_code' column to Customers table...")
+            cursor.execute("ALTER TABLE Customers ADD COLUMN customer_code TEXT")
+            conn.commit()
+
+        try:
+            cursor.execute("SELECT trust_score FROM Customers LIMIT 1")
+        except sqlite3.OperationalError:
+            print("Migrating: Adding 'trust_score' column to Customers table...")
+            cursor.execute("ALTER TABLE Customers ADD COLUMN trust_score INTEGER DEFAULT 50")
+            conn.commit()
+
+        try:
+            cursor.execute("SELECT segment FROM Customers LIMIT 1")
+        except sqlite3.OperationalError:
+            print("Migrating: Adding 'segment' column to Customers table...")
+            cursor.execute("ALTER TABLE Customers ADD COLUMN segment TEXT DEFAULT 'Standard'")
+            conn.commit()
+
+        # --- MIGRATIONS FOR ADMINS TABLE ---
+        try:
+            cursor.execute("SELECT email FROM Admins LIMIT 1")
+        except sqlite3.OperationalError:
+            print("Migrating: Adding 'email' column to Admins table...")
+            cursor.execute("ALTER TABLE Admins ADD COLUMN email TEXT")
+            conn.commit()
+
+        try:
+            cursor.execute("SELECT role FROM Admins LIMIT 1")
+        except sqlite3.OperationalError:
+            print("Migrating: Adding 'role' column to Admins table...")
+            cursor.execute("ALTER TABLE Admins ADD COLUMN role TEXT DEFAULT 'admin'")
+            conn.commit()
             
-        # Try importing db
-        try:
-            from app.db import get_conn
-        import traceback
-        return {
-            "error": "Unexpected error",
-            "detail": str(e),
-            "traceback": traceback.format_exc()
-        }
+        # Ensure Admin Exists
+        admin = cursor.execute("SELECT * FROM Admins WHERE username = 'Asharib'").fetchone()
+        if not admin:
+            from app import auth
+            hashed_pw = auth.hash_password("mywordislaw")
+            cursor.execute("INSERT INTO Admins (username, password_hash, full_name, email, role) VALUES (?, ?, ?, ?, ?)", 
+                          ("Asharib", hashed_pw, "Asharib Khan", "admin@neobank.com", "admin"))
+            conn.commit()
+            print("Admin user 'Asharib' created.")
+        
+        conn.close()
+    except Exception as e:
+        print(f"Migration Warning: {e}")
+
+@app.get("/")
+def root():
+    return {"message": "NeoBank KYC API is running securely."}
 
 @app.get("/api/debug-2fa")
 def debug_2fa():
@@ -119,4 +177,3 @@ def debug_2fa():
             "detail": str(e),
             "traceback": traceback.format_exc()
         }
-
