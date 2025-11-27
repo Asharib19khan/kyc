@@ -25,46 +25,56 @@ def register_customer(
         
         # 1. Calculate Initial Risk Profile
         print("Calculating risk profile...")
-        from app.services import risk_engine
-        import random
-        
-        # Fetch existing customers for duplicate check
-        conn = db.get_conn()
-        conn.row_factory = db.sqlite3.Row
-        cursor = conn.cursor()
-        rows = cursor.execute("SELECT id, full_name, cnic, email, phone FROM Customers").fetchall()
-        
-        # Decrypt sensitive data for comparison
-        existing_customers = []
-        for row in rows:
-            cust = dict(row)
-            try:
-                cust['cnic'] = security_utils.decrypt_data(cust['cnic'])
-                cust['phone'] = security_utils.decrypt_data(cust['phone'])
-            except Exception:
-                pass
-            existing_customers.append(cust)
+        risk_profile = None
+        try:
+            from app.services import risk_engine
+            import random
             
-        conn.close()
-        
-        cust_data = {
-            "email": email,
-            "address": address,
-            "cnic": cnic,
-            "phone": phone,
-            "income_range": income_range,
-            "full_name": full_name
-        }
-        
-        # Simulate Face Match Score
-        simulated_face_match = random.randint(60, 99)
-        
-        risk_profile = risk_engine.calculate_risk_profile(
-            cust_data,
-            existing_customers=existing_customers,
-            face_match_score=simulated_face_match
-        )
-        print(f"Risk profile calculated: {risk_profile}")
+            # Fetch existing customers for duplicate check
+            conn = db.get_conn()
+            conn.row_factory = db.sqlite3.Row
+            cursor = conn.cursor()
+            rows = cursor.execute("SELECT id, full_name, cnic, email, phone FROM Customers").fetchall()
+            
+            # Decrypt sensitive data for comparison
+            existing_customers = []
+            for row in rows:
+                cust = dict(row)
+                try:
+                    cust['cnic'] = security_utils.decrypt_data(cust['cnic'])
+                    cust['phone'] = security_utils.decrypt_data(cust['phone'])
+                except Exception:
+                    pass
+                existing_customers.append(cust)
+                
+            conn.close()
+            
+            cust_data = {
+                "email": email,
+                "address": address,
+                "cnic": cnic,
+                "phone": phone,
+                "income_range": income_range,
+                "full_name": full_name
+            }
+            
+            # Simulate Face Match Score
+            simulated_face_match = random.randint(60, 99)
+            
+            risk_profile = risk_engine.calculate_risk_profile(
+                cust_data,
+                existing_customers=existing_customers,
+                face_match_score=simulated_face_match
+            )
+            print(f"Risk profile calculated: {risk_profile}")
+        except Exception as e:
+            print(f"Warning: Risk engine failed: {e}. Using default values.")
+            risk_profile = {
+                'risk_score': 30,
+                'trust_score': 70,
+                'segment': 'Standard',
+                'reasons': ['Risk engine unavailable']
+            }
 
         # 2. Hash Password
         from app import auth
@@ -81,14 +91,18 @@ def register_customer(
         
         # 4. Assess Loan Eligibility
         print("Assessing loan eligibility...")
-        loan_eligibility = risk_engine.assess_loan_eligibility(risk_profile['risk_score'], income_range)
-        db.save_loan_eligibility(
-            cust_id,
-            risk_profile['risk_score'],
-            income_range,
-            loan_eligibility['status'],
-            loan_eligibility['max_limit']
-        )
+        try:
+            from app.services import risk_engine
+            loan_eligibility = risk_engine.assess_loan_eligibility(risk_profile['risk_score'], income_range)
+            db.save_loan_eligibility(
+                cust_id,
+                risk_profile['risk_score'],
+                income_range,
+                loan_eligibility['status'],
+                loan_eligibility['max_limit']
+            )
+        except Exception as e:
+            print(f"Warning: Loan eligibility assessment failed: {e}. Skipping.")
         
         # 5. Create Verification Record with AI Recommendations
         print("Creating verification record...")
@@ -125,8 +139,11 @@ def register_customer(
         
         # 6. Generate Financials (Demo)
         print("Generating mock financials...")
-        db.generate_mock_financials(cust_id)
-        print("Mock financials generated.")
+        try:
+            db.generate_mock_financials(cust_id)
+            print("Mock financials generated.")
+        except Exception as e:
+            print(f"Warning: Mock financials generation failed: {e}. Skipping.")
         
         if latitude and longitude:
             print(f"Customer {cust_id} Location: {latitude}, {longitude}")
