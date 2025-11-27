@@ -26,34 +26,6 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
-from app.db import init_db
-from app.api import auth, kyc, admin, dashboard, reports
-import os
-
-app = FastAPI(
-    title="NeoBank KYC Platform",
-    description="High-Security KYC Verification System with AI and Geolocation",
-    version="2.0.0"
-)
-
-# CORS Configuration
-origins = [
-    "http://localhost:5173", # React Dev Server
-    "http://localhost:3000",
-    "https://kycverificationsystem.netlify.app", # Production Frontend (Current)
-    "https://guiltless-haupia-b5b8f7.netlify.app", # Production Frontend (Old)
-    "*"  # Allow all origins for now
-]
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
 )
 
 # Mount Static Files for Uploads
