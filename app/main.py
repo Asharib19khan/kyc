@@ -69,24 +69,6 @@ def initialize_admin():
         # Try importing db
         try:
             from app.db import get_conn
-        except ImportError as e:
-            return {"error": f"ImportError app.db: {str(e)}"}
-        
-        conn = get_conn()
-        cursor = conn.cursor()
-        
-        # Check if admin already exists
-        existing = cursor.execute("SELECT * FROM Admins WHERE username = ?", ("Asharib",)).fetchone()
-        if existing:
-            conn.close()
-            return {"error": "Admin user already exists"}
-        
-        # Create admin user using auth module
-        username = "Asharib"
-        password = "mywordislaw"
-        full_name = "Asharib Khan"
-        email = "asharib@neobank.com"
-        
         import traceback
         return {
             "error": "Unexpected error",
