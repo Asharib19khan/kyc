@@ -37,25 +37,8 @@ const Login = () => {
             return;
         }
 
-        if (role === 'admin') {
-            setIsLoading(true);
-            try {
-                const formData = new FormData();
-                formData.append('username', username);
-                const res = await axios.post('/api/auth/send-2fa', formData);
-
-                console.log("Debug Code:", res.data.debug_code);
-
-                setStep(2);
-            } catch (err) {
-                console.error(err);
-                setError('Failed to send 2FA code. Please check your username.');
-            } finally {
-                setIsLoading(false);
-            }
-        } else {
-            handleLogin();
-        }
+        // DIRECT LOGIN FOR ADMIN (2FA DISABLED)
+        handleLogin();
     };
 
     const handleLogin = async (e) => {
@@ -69,15 +52,9 @@ const Login = () => {
             formData.append('password', password);
 
             if (role === 'admin') {
-                formData.append('client_secret', twoFaCode);
+                // No 2FA code needed
             } else {
                 formData.append('client_secret', customerCode);
-            }
-
-            if (role === 'admin' && !twoFaCode) {
-                setError('Please enter the 2FA code.');
-                setIsLoading(false);
-                return;
             }
 
             const response = await axios.post('/api/auth/token', formData);
@@ -228,7 +205,7 @@ const Login = () => {
                             disabled={isLoading}
                             className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3.5 rounded-xl transition-all shadow-lg hover:shadow-blue-500/30 flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
                         >
-                            {isLoading ? 'Processing...' : (role === 'admin' ? 'Next Step' : 'Login Securely')}
+                            {isLoading ? 'Processing...' : 'Login Securely'}
                             {!isLoading && <ArrowRight size={18} />}
                         </button>
                     </form>
