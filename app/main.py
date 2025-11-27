@@ -15,7 +15,8 @@ app = FastAPI(
 origins = [
     "http://localhost:5173", # React Dev Server
     "http://localhost:3000",
-    "https://guiltless-haupia-b5b8f7.netlify.app", # Production Frontend
+    "https://kycverificationsystem.netlify.app", # Production Frontend (Current)
+    "https://guiltless-haupia-b5b8f7.netlify.app", # Production Frontend (Old)
     "*"  # Allow all origins for now
 ]
 
