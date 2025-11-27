@@ -8,7 +8,10 @@ CREATE TABLE IF NOT EXISTS Customers (
     phone TEXT,
     address TEXT,
     income_range TEXT,
-    password_hash TEXT, -- Added for security
+    password_hash TEXT,
+    trust_score INTEGER DEFAULT 50,
+    segment TEXT DEFAULT 'Standard',
+    customer_code TEXT UNIQUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -30,6 +33,7 @@ CREATE TABLE IF NOT EXISTS Verifications (
     remarks TEXT,
     verified_by TEXT,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    date TIMESTAMP, -- Added for tracking verification dates
     FOREIGN KEY(customer_id) REFERENCES Customers(id)
 );
 
@@ -38,6 +42,7 @@ CREATE TABLE IF NOT EXISTS LoanEligibility (
     customer_id INTEGER NOT NULL,
     risk_score INTEGER,
     income_group TEXT,
+    income_range TEXT, -- Added for consistency
     eligibility_status TEXT, -- 'Auto-Approved', 'Review', 'Rejected'
     max_limit REAL,
     calculated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -49,7 +54,10 @@ CREATE TABLE IF NOT EXISTS Admins (
     username TEXT UNIQUE NOT NULL,
     password_hash TEXT NOT NULL,
     full_name TEXT,
-    role TEXT DEFAULT 'Admin'
+    email TEXT,
+    role TEXT DEFAULT 'Admin',
+    totp_secret TEXT,
+    settings TEXT DEFAULT '{}'
 );
 
 CREATE TABLE IF NOT EXISTS AuditLog (
