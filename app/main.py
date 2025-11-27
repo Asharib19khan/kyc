@@ -87,49 +87,6 @@ def initialize_admin():
         full_name = "Asharib Khan"
         email = "asharib@neobank.com"
         
-        try:
-            hashed_password = auth.hash_password(password)
-        except Exception as e:
-            conn.close()
-            return {"error": f"Hashing failed: {str(e)}"}
-        
-        # Handle Schema Migration (Add missing columns if needed)
-        try:
-            cursor.execute("SELECT email FROM Admins LIMIT 1")
-        except Exception:
-            # Column email missing, add it
-            try:
-                cursor.execute("ALTER TABLE Admins ADD COLUMN email TEXT")
-                conn.commit()
-            except Exception as e:
-                return {"error": f"Failed to add email column: {str(e)}"}
-
-        try:
-            cursor.execute("SELECT role FROM Admins LIMIT 1")
-        except Exception:
-            # Column role missing, add it
-            try:
-                cursor.execute("ALTER TABLE Admins ADD COLUMN role TEXT DEFAULT 'super_admin'")
-                conn.commit()
-            except Exception as e:
-                return {"error": f"Failed to add role column: {str(e)}"}
-        
-        # Now Insert
-        cursor.execute(
-            "INSERT INTO Admins (username, password_hash, full_name, email, role) VALUES (?, ?, ?, ?, ?)",
-            (username, hashed_password, full_name, email, "super_admin")
-        )
-        
-        conn.commit()
-        conn.close()
-        
-        return {
-            "success": True,
-            "message": "Admin user created successfully",
-            "username": username,
-            "note": "You can now login with this username and your password"
-        }
-    except Exception as e:
         import traceback
         return {
             "error": "Unexpected error",

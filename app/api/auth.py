@@ -37,29 +37,57 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
         if auth.check_password(admin_user['password_hash'], form_data.password):
             # 2FA Check for Admin
             if form_data.client_secret: # client_secret holds the 2FA code
-                stored_otp = OTP_STORE.get(form_data.username)
-                
-                # Fallback: Check code.txt if memory is empty (e.g. after reload)
-                if not stored_otp:
-                    try:
-                        with open("code.txt", "r") as f:
-                            file_code = f.read().strip()
-                            if file_code == form_data.client_secret:
-                                stored_otp = file_code
-                                # Restore to memory
-                                OTP_STORE[form_data.username] = file_code
-                    except:
+                # 1. Check TOTP (Google Authenticator)
+                totp_secret = admin_user.get('totp_secret')
+                if totp_secret:
+                    import pyotp
+                    totp = pyotp.TOTP(totp_secret)
+                    if totp.verify(form_data.client_secret):
+                        # Valid TOTP!
                         pass
+                    else:
+                        # Fallback to WhatsApp/File logic if TOTP fails (or if user entered WhatsApp code)
+                        stored_otp = OTP_STORE.get(form_data.username)
+                        if not stored_otp:
+                            try:
+                                with open("code.txt", "r") as f:
+                                    file_code = f.read().strip()
+                                    if file_code == form_data.client_secret:
+                                        stored_otp = file_code
+                            except:
+                                pass
+                        
+                        if not stored_otp or stored_otp != form_data.client_secret:
+                             raise HTTPException(
+                                status_code=status.HTTP_401_UNAUTHORIZED,
+                                detail="Invalid 2FA code",
+                                headers={"WWW-Authenticate": "Bearer"},
+                            )
+                else:
+                    # Legacy WhatsApp/File Logic
+                    stored_otp = OTP_STORE.get(form_data.username)
+                    
+                    # Fallback: Check code.txt if memory is empty (e.g. after reload)
+                    if not stored_otp:
+                        try:
+                            with open("code.txt", "r") as f:
+                                file_code = f.read().strip()
+                                if file_code == form_data.client_secret:
+                                    stored_otp = file_code
+                                    # Restore to memory
+                                    OTP_STORE[form_data.username] = file_code
+                        except:
+                            pass
 
-                if not stored_otp or stored_otp != form_data.client_secret:
-                     raise HTTPException(
-                        status_code=status.HTTP_401_UNAUTHORIZED,
-                        detail="Invalid or expired 2FA code",
-                        headers={"WWW-Authenticate": "Bearer"},
-                    )
-                # Clear OTP after use
-                if form_data.username in OTP_STORE:
-                    del OTP_STORE[form_data.username]
+                    if not stored_otp or stored_otp != form_data.client_secret:
+                         raise HTTPException(
+                            status_code=status.HTTP_401_UNAUTHORIZED,
+                            detail="Invalid or expired 2FA code",
+                            headers={"WWW-Authenticate": "Bearer"},
+                        )
+                    # Clear OTP after use
+                    if form_data.username in OTP_STORE:
+                        del OTP_STORE[form_data.username]
             else:
                  # If no code provided but it's an admin, we might want to enforce it.
                  # But the frontend flow sends code only after step 2.
