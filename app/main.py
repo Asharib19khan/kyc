@@ -70,65 +70,54 @@ app.include_router(reports.router, prefix="/api/admin", tags=["reports"])
 # Initialize DB and Migrations
 @app.on_event("startup")
 def on_startup():
-    init_db()
-    
-    # Run Migrations Safely
     try:
+        init_db()
+        
+        # Run Migrations Safely
         from app.db import get_conn
         import sqlite3
         conn = get_conn()
         cursor = conn.cursor()
         
-        # --- MIGRATIONS FOR CUSTOMERS TABLE ---
-        try:
-            cursor.execute("SELECT customer_code FROM Customers LIMIT 1")
-        except sqlite3.OperationalError:
-            print("Migrating: Adding 'customer_code' column to Customers table...")
-            cursor.execute("ALTER TABLE Customers ADD COLUMN customer_code TEXT")
-            conn.commit()
+        # Helper function to add column if missing
+        def add_column_safe(table, column, type_def):
+            try:
+                cursor.execute(f"SELECT {column} FROM {table} LIMIT 1")
+            except sqlite3.OperationalError:
+                print(f"Migrating: Adding '{column}' to {table}...")
+                try:
+                    cursor.execute(f"ALTER TABLE {table} ADD COLUMN {column} {type_def}")
+                    conn.commit()
+                except Exception as e:
+                    print(f"Migration Error ({column}): {e}")
 
-        try:
-            cursor.execute("SELECT trust_score FROM Customers LIMIT 1")
-        except sqlite3.OperationalError:
-            print("Migrating: Adding 'trust_score' column to Customers table...")
-            cursor.execute("ALTER TABLE Customers ADD COLUMN trust_score INTEGER DEFAULT 50")
-            conn.commit()
+        # Customers Table Migrations
+        add_column_safe("Customers", "customer_code", "TEXT")
+        add_column_safe("Customers", "trust_score", "INTEGER DEFAULT 50")
+        add_column_safe("Customers", "segment", "TEXT DEFAULT 'Standard'")
 
-        try:
-            cursor.execute("SELECT segment FROM Customers LIMIT 1")
-        except sqlite3.OperationalError:
-            print("Migrating: Adding 'segment' column to Customers table...")
-            cursor.execute("ALTER TABLE Customers ADD COLUMN segment TEXT DEFAULT 'Standard'")
-            conn.commit()
-
-        # --- MIGRATIONS FOR ADMINS TABLE ---
-        try:
-            cursor.execute("SELECT email FROM Admins LIMIT 1")
-        except sqlite3.OperationalError:
-            print("Migrating: Adding 'email' column to Admins table...")
-            cursor.execute("ALTER TABLE Admins ADD COLUMN email TEXT")
-            conn.commit()
-
-        try:
-            cursor.execute("SELECT role FROM Admins LIMIT 1")
-        except sqlite3.OperationalError:
-            print("Migrating: Adding 'role' column to Admins table...")
-            cursor.execute("ALTER TABLE Admins ADD COLUMN role TEXT DEFAULT 'admin'")
-            conn.commit()
+        # Admins Table Migrations
+        add_column_safe("Admins", "email", "TEXT")
+        add_column_safe("Admins", "role", "TEXT DEFAULT 'admin'")
+        add_column_safe("Admins", "totp_secret", "TEXT")
             
         # Ensure Admin Exists
-        admin = cursor.execute("SELECT * FROM Admins WHERE username = 'Asharib'").fetchone()
-        if not admin:
-            from app import auth
-            hashed_pw = auth.hash_password("mywordislaw")
-            cursor.execute("INSERT INTO Admins (username, password_hash, full_name, email, role) VALUES (?, ?, ?, ?, ?)", 
-                          ("Asharib", hashed_pw, "Asharib Khan", "admin@neobank.com", "admin"))
-            conn.commit()
-            print("Admin user 'Asharib' created.")
+        try:
+            admin = cursor.execute("SELECT * FROM Admins WHERE username = 'Asharib'").fetchone()
+            if not admin:
+                from app import auth
+                hashed_pw = auth.hash_password("mywordislaw")
+                cursor.execute("INSERT INTO Admins (username, password_hash, full_name, email, role) VALUES (?, ?, ?, ?, ?)", 
+                              ("Asharib", hashed_pw, "Asharib Khan", "admin@neobank.com", "admin"))
+                conn.commit()
+                print("Admin user 'Asharib' created.")
+        except Exception as e:
+            print(f"Admin Creation Error: {e}")
         
         conn.close()
     except Exception as e:
-        print(f"Migration Warning: {e}")
+        print(f"Startup Error: {e}")
+        # Don't raise, allow app to start even if migration fails partially
 
 @app.get("/")
 def root():
