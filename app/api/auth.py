@@ -35,17 +35,12 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
     if admin_user:
         # print(f"DEBUG: Admin found: {admin_user['username']}")
         if auth.check_password(admin_user['password_hash'], form_data.password):
-        if auth.check_password(admin_user['password_hash'], form_data.password):
             # 2FA DISABLED BY USER REQUEST
             # Direct login for admin
             token = create_access_token({"sub": admin_user['username'], "role": "admin", "id": admin_user['id']})
             return {"access_token": token, "token_type": "bearer", "role": "admin", "user_id": admin_user['id'], "full_name": admin_user['full_name']}
         else:
             pass # Password mismatch
-        else:
-            pass # Password mismatch
-    else:
-        pass # Admin not found
 
     # 2. Check Customer (Login by CNIC + Customer Code)
     # Customer login requires: CNIC (username), Password, and Customer Code (client_secret)
